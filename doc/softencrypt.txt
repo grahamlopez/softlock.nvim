@@ -1,0 +1,43 @@
+*softencrypt.txt*  Passphrase-encrypted text files              *softencrypt*
+
+Experimental; not intended for critical data. Requires Neovim 0.12.3+, GnuPG
+2.2+, and Linux. Load at startup; no setup() call is needed.
+
+USAGE ~
+Create a file with :edit notes.md.gpg, then :EncryptSetup. Opening an existing
+.gpg file prompts once. Normal :write, :update, :write!, and :wq save ciphertext.
+The buffer uses notes.md; b:softencrypt_path contains the encrypted storage path.
+
+COMMANDS ~
+                                                        *:EncryptSetup*
+:EncryptSetup [path.gpg]       Encrypt this buffer to a new file; prompts for a
+                              destination when omitted. Never overwrites a file.
+                              Previous plaintext copies are not removed.
+                                                        *:EncryptUnlock*
+:EncryptUnlock                Retry a cancelled or failed unlock.
+                                                        *:EncryptChangePassphrase*
+:EncryptChangePassphrase      Confirm a new passphrase and save immediately.
+                                                        *:EncryptCheck*
+:EncryptCheck                 Diagnose GPG using dummy text.
+
+An empty passphrase cancels. Newline/NUL characters are unsupported. Use a strong
+passphrase. Unloading/wiping forgets the passphrase; hiding a buffer keeps it.
+
+IMPORTANT LIMITS ~
+Opening encrypted buffers disables ShaDa persistence for the entire session.
+Encrypted buffers disable swap, persistent undo, modelines, and autoread.
+Cancelling the setup passphrase prompt leaves these protections enabled.
+Alternate/range/append writes, renames, and temporary-file filters are blocked.
+Only local regular files with one hard link are supported; no remote or binary
+files. Plaintext is limited to 16 MiB. Saves use 0600 permissions and replace the
+inode; ACLs and extended attributes are not preserved. Failures before publication
+preserve the previous ciphertext and passphrase. External-change checks
+are not a cross-process lock. If post-publication cleanup fails, the save warns;
+remove the named ciphertext temporary file and reopen before saving again.
+
+Trusted configuration is required. Other plugins and deliberate exports can
+persist plaintext. Existing plaintext, swap/undo/backup files, OS swap, crash
+dumps, and external processes are outside scope. Do not combine encryption
+plugins for the same .gpg files. Provided as is, without warranty; see LICENSE.
+
+vim:tw=78:ts=8:ft=help:norl:
