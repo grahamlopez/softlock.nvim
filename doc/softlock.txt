@@ -1,24 +1,24 @@
-*softencrypt.txt*  Passphrase-encrypted text files              *softencrypt*
+*softlock.txt*  Passphrase-encrypted text files              *softlock*
 
 Experimental; not intended for critical data. Requires Neovim 0.12.3+, GnuPG
 2.2+, and Linux. Load at startup; no setup() call is needed.
 
 USAGE ~
-Create a file with :edit notes.md.gpg, then :EncryptSetup. Opening an existing
+Create a file with :edit notes.md.gpg, then :SoftLockSetup. Opening an existing
 .gpg file prompts once. Normal :write, :update, :write!, and :wq save ciphertext.
-The buffer uses notes.md; b:softencrypt_path contains the encrypted storage path.
+The buffer uses notes.md; b:softlock_path contains the encrypted storage path.
 
 COMMANDS ~
-                                                        *:EncryptSetup*
-:EncryptSetup [path.gpg]       Encrypt this buffer to a new file; prompts for a
+                                                        *:SoftLockSetup*
+:SoftLockSetup [path.gpg]       Encrypt this buffer to a new file; prompts for a
                               destination when omitted. Never overwrites a file.
                               Previous plaintext copies are not removed.
-                                                        *:EncryptUnlock*
-:EncryptUnlock                Retry a cancelled or failed unlock.
-                                                        *:EncryptChangePassphrase*
-:EncryptChangePassphrase      Confirm a new passphrase and save immediately.
-                                                        *:EncryptCheck*
-:EncryptCheck                 Diagnose GPG using dummy text.
+                                                        *:SoftLockUnlock*
+:SoftLockUnlock                Retry a cancelled or failed unlock.
+                                                        *:SoftLockChangePassphrase*
+:SoftLockChangePassphrase      Confirm a new passphrase and save immediately.
+                                                        *:SoftLockCheck*
+:SoftLockCheck                 Diagnose GPG using dummy text.
 
 An empty passphrase cancels. Newline/NUL characters are unsupported. Use a strong
 passphrase. Unloading/wiping forgets the passphrase; hiding a buffer keeps it.

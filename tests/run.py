@@ -13,15 +13,15 @@ with tempfile.TemporaryDirectory(prefix="nve-", dir="/tmp") as directory:
     root = Path(directory)
     gpg_home = root / "gpg"
     gpg_home.mkdir(mode=0o700)
-    env = dict(os.environ, GNUPGHOME=str(gpg_home), SOFTENCRYPT_TEST_ROOT=str(root),
-               SOFTENCRYPT_PLUGIN=str(repo / "plugin/softencrypt.lua"),
-               SOFTENCRYPT_TEST_SCRIPT=str(repo / "tests/integration.lua"),
-               SOFTENCRYPT_TEST_REGRESSIONS_ONLY="1" if regressions_only else "0",
+    env = dict(os.environ, GNUPGHOME=str(gpg_home), SOFTLOCK_TEST_ROOT=str(root),
+               SOFTLOCK_PLUGIN=str(repo / "plugin/softlock.lua"),
+               SOFTLOCK_TEST_SCRIPT=str(repo / "tests/integration.lua"),
+               SOFTLOCK_TEST_REGRESSIONS_ONLY="1" if regressions_only else "0",
                XDG_STATE_HOME=str(root / "state"), XDG_CACHE_HOME=str(root / "cache"),
                XDG_DATA_HOME=str(root / "data"), NVIM_LOG_FILE=str(root / "nvim.log"))
     try:
         script = """lua vim.schedule(function()
-          local ok, err = xpcall(function() dofile(vim.env.SOFTENCRYPT_TEST_SCRIPT) end, debug.traceback)
+          local ok, err = xpcall(function() dofile(vim.env.SOFTLOCK_TEST_SCRIPT) end, debug.traceback)
           if not ok then print(err); vim.cmd('cquit') end
         end)"""
         command = ["nvim", "--headless", "-u", "NONE", "-i", "NONE", "-c", script]
@@ -54,7 +54,7 @@ with tempfile.TemporaryDirectory(prefix="nve-", dir="/tmp") as directory:
             "vim.cmd('filetype plugin indent on')\n"
             "vim.fn.inputsecret = function() return 'replacement secret' end\n"
         )
-        check = """lua assert(vim.g.loaded_softencrypt); assert(vim.bo.filetype == 'markdown');
+        check = """lua assert(vim.g.loaded_softlock); assert(vim.bo.filetype == 'markdown');
           assert(vim.b.did_ftplugin); assert(vim.o.shadafile == 'NONE'); assert(not vim.bo.swapfile)"""
         result = subprocess.run(["nvim", "--headless", "-u", str(init), "-i", "NONE",
                                  str(root / "notes.md.gpg"), "-c", check, "-c", "wq"],

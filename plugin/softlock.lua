@@ -1,16 +1,16 @@
--- Drop this file into stdpath('config') .. '/plugin/softencrypt.lua'.
+-- Drop this file into stdpath('config') .. '/plugin/softlock.lua'.
 -- Requires Neovim >= 0.12.3 and GnuPG >= 2.2. No keys or GPG config needed.
 -- Private state deliberately contains the passphrase; never put it in b:/g:.
-if vim.g.loaded_softencrypt then return end
+if vim.g.loaded_softlock then return end
 if vim.fn.has('nvim-0.12.3') == 0 then
-  vim.notify('softencrypt.lua requires Neovim 0.12.3+', vim.log.levels.ERROR)
+  vim.notify('softlock.lua requires Neovim 0.12.3+', vim.log.levels.ERROR)
   return
 end
-vim.g.loaded_softencrypt = true
+vim.g.loaded_softlock = true
 
 local api, uv = vim.api, vim.uv
-local group = api.nvim_create_augroup('Softencrypt', { clear = true })
----@class SoftencryptState
+local group = api.nvim_create_augroup('SoftLock', { clear = true })
+---@class SoftLockState
 ---@field storage string Encrypted destination; the buffer uses its underlying name.
 ---@field locked boolean Locked states never permit writes.
 ---@field passphrase? string Present only while unlocked; dropped on unload.
@@ -19,14 +19,14 @@ local group = api.nvim_create_augroup('Softencrypt', { clear = true })
 ---@field empty? boolean Whether the last decoded/encoded text was empty.
 ---@field empty_tick? integer Changedtick associated with that empty text.
 
----@type table<integer, SoftencryptState>
+---@type table<integer, SoftLockState>
 local states = {}
 local max_bytes = 16 * 1024 * 1024
 local no_shada_contents = "'0,<0,s0,:0,/0,@0,f0"
 local shada_disabled = false
 local read_buffer, write_buffer
 
-local function fail(message) error('Softencrypt: ' .. message, 0) end
+local function fail(message) error('SoftLock: ' .. message, 0) end
 local function path(name) return vim.fs.normalize(vim.fn.fnamemodify(name, ':p')) end
 local function inner(name) return name:gsub('%.gpg$', '') end
 
@@ -108,7 +108,7 @@ local function crypt(data, passphrase, decrypt)
     -- Do not echo GPG's stderr: decrypted packet metadata may be sensitive.
     local message = decrypt and 'unlock failed (wrong passphrase, damaged file, or GPG error)'
       or 'GPG encryption failed; the previous file has not been replaced'
-    fail(message .. ' (exit ' .. tostring(result.code) .. '; run :EncryptCheck for diagnostics)')
+    fail(message .. ' (exit ' .. tostring(result.code) .. '; run :SoftLockCheck for diagnostics)')
   end
   return result.stdout
 end
@@ -116,7 +116,7 @@ end
 local function check_gpg()
   -- Only this synthetic input reaches GPG, so its stderr contains no document
   -- packet metadata or user passphrase. Never retry a real document to diagnose it.
-  local sample, passphrase = 'softencrypt.lua diagnostic text\n', 'softencrypt.lua diagnostic passphrase'
+  local sample, passphrase = 'softlock.lua diagnostic text\n', 'softlock.lua diagnostic passphrase'
   local ok, err = pcall(function()
     local encrypted = gpg_result(sample, passphrase, false)
     if encrypted.code ~= 0 then
@@ -131,7 +131,7 @@ local function check_gpg()
     if decrypted.stdout ~= sample then fail('GPG diagnostic round trip returned unexpected data') end
   end)
   if ok then
-    vim.notify('Softencrypt: GPG encryption/decryption check passed (' .. vim.fn.exepath('gpg') .. ')')
+    vim.notify('SoftLock: GPG encryption/decryption check passed (' .. vim.fn.exepath('gpg') .. ')')
   else
     vim.notify(tostring(err), vim.log.levels.ERROR)
   end
@@ -270,7 +270,7 @@ local function atomic_write(name, data, expected)
   check_unchanged(name, expected)
   local random = assert(uv.random(12))
   local suffix = (random:gsub('.', function(c) return ('%02x'):format(c:byte()) end))
-  local temporary = vim.fs.joinpath(vim.fs.dirname(name), '.softencrypt-' .. suffix)
+  local temporary = vim.fs.joinpath(vim.fs.dirname(name), '.softlock-' .. suffix)
   local fd, err = uv.fs_open(temporary, 'wx', 384) -- 0600, ciphertext only
   if not fd then fail('cannot create encrypted temporary file: ' .. tostring(err)) end
   local ok, write_err = pcall(function()
@@ -297,7 +297,7 @@ local function atomic_write(name, data, expected)
   -- or report a failed save after the destination has already been published.
   local cleanup_failed = not expected and not uv.fs_unlink(temporary)
   if cleanup_failed then
-    vim.notify('Softencrypt: saved, but could not remove ' .. temporary
+    vim.notify('SoftLock: saved, but could not remove ' .. temporary
       .. '; remove this ciphertext temporary file and reopen before saving again', vim.log.levels.WARN)
   end
   -- Persist the directory entry too. The new ciphertext is already published,
@@ -306,7 +306,7 @@ local function atomic_write(name, data, expected)
   local synced = dir and uv.fs_fsync(dir)
   if dir then uv.fs_close(dir) end
   if not synced then
-    vim.notify('Softencrypt: saved, but could not sync the destination directory', vim.log.levels.WARN)
+    vim.notify('SoftLock: saved, but could not sync the destination directory', vim.log.levels.WARN)
   end
   -- A failed unlink leaves our own second hard link. Retain the committed
   -- snapshot, but keep ordinary stat() strict so further writes are refused.
@@ -336,7 +336,7 @@ local function guard(buf, storage)
   local state = { storage = storage, locked = true }
   states[buf] = state
   harden(buf)
-  vim.b[buf].softencrypt_path = storage
+  vim.b[buf].softlock_path = storage
   local function on(event, callback)
     api.nvim_create_autocmd(event, { group = group, buffer = buf, callback = callback })
   end
@@ -394,7 +394,7 @@ end
 
 write_buffer = function(buf, destination, replacement_passphrase)
   local state = states[buf]
-  if not state or state.locked or not state.passphrase then fail('buffer is locked; use :EncryptSetup or :EncryptUnlock') end
+  if not state or state.locked or not state.passphrase then fail('buffer is locked; use :SoftLockSetup or :SoftLockUnlock') end
   if destination and destination ~= '' and path(destination) ~= path(api.nvim_buf_get_name(buf)) then
     fail('alternate destinations are disabled; use ordinary :w')
   end
@@ -418,7 +418,7 @@ end
 local function setup(options)
   local buf = api.nvim_get_current_buf()
   local previous = states[buf]
-  if previous and not previous.locked then fail('already encrypted; use :EncryptChangePassphrase') end
+  if previous and not previous.locked then fail('already encrypted; use :SoftLockChangePassphrase') end
   if vim.bo[buf].buftype ~= '' then fail('setup requires a normal text buffer') end
   local name = api.nvim_buf_get_name(buf)
   local destination = options.fargs[1] or ''
@@ -433,7 +433,7 @@ local function setup(options)
   if not destination:match('%.gpg$') or inner(destination) == destination or vim.fs.basename(destination) == '.gpg' then
     fail('destination must have an underlying filename followed by .gpg')
   end
-  if stat(destination) then fail('setup will not overwrite an existing file; use :EncryptUnlock to open it') end
+  if stat(destination) then fail('setup will not overwrite an existing file; use :SoftLockUnlock to open it') end
   local logical = inner(destination)
   collision(buf, logical, destination)
   harden(buf) -- Remains in force even if setup is cancelled or fails.
@@ -449,7 +449,7 @@ local function setup(options)
   end
   state.storage, state.snapshot, state.passphrase, state.locked = destination, snapshot, passphrase, false
   state.empty, state.empty_tick = empty, api.nvim_buf_get_changedtick(buf)
-  vim.b[buf].softencrypt_path = destination
+  vim.b[buf].softlock_path = destination
   vim.bo[buf].modified = false
   -- Preserve an existing buffer's ftplugin state; initialize a new buffer normally.
   if vim.bo[buf].filetype == '' then
@@ -482,9 +482,9 @@ api.nvim_create_autocmd('OptionSet', {
   end,
 })
 
-api.nvim_create_user_command('EncryptSetup', setup, { nargs = '?', complete = 'file', desc = 'Encrypt the current buffer to a new .gpg file' })
-api.nvim_create_user_command('EncryptCheck', check_gpg, { desc = 'Diagnose GPG using dummy text, without accessing the current buffer' })
-api.nvim_create_user_command('EncryptUnlock', function()
+api.nvim_create_user_command('SoftLockSetup', setup, { nargs = '?', complete = 'file', desc = 'Encrypt the current buffer to a new .gpg file' })
+api.nvim_create_user_command('SoftLockCheck', check_gpg, { desc = 'Diagnose GPG using dummy text, without accessing the current buffer' })
+api.nvim_create_user_command('SoftLockUnlock', function()
   local buf = api.nvim_get_current_buf()
   local state = states[buf]
   if not state then fail('not an encrypted buffer') end
@@ -492,7 +492,7 @@ api.nvim_create_user_command('EncryptUnlock', function()
   if vim.bo[buf].modified then fail('buffer has changes; discard them explicitly with :edit! before unlocking') end
   read_buffer(buf, state)
 end, { desc = 'Retry unlocking an encrypted file' })
-api.nvim_create_user_command('EncryptChangePassphrase', function()
+api.nvim_create_user_command('SoftLockChangePassphrase', function()
   local buf = api.nvim_get_current_buf()
   if not states[buf] or states[buf].locked then fail('unlock an encrypted buffer first') end
   write_buffer(buf, nil, ask_passphrase(true))

@@ -1,4 +1,4 @@
-# softencrypt
+# softlock.nvim
 
 A single-file Neovim plugin for passphrase-encrypted text files using GnuPG.
 Experimental; not intended for critical data. Requires Neovim 0.12.3+, GnuPG 2.2+,
@@ -13,16 +13,15 @@ and automatic reloading are disabled for encrypted buffers.
 With lazy.nvim (replace `OWNER`):
 
 ```lua
-{ 'OWNER/softencrypt', lazy = false }
+{ 'OWNER/softlock.nvim', lazy = false }
 ```
 
 Other plugin managers work too; load the repository at startup. No `setup()` call
 is needed.
 
-Or copy [plugin/softencrypt.lua](plugin/softencrypt.lua) to
-`~/.config/nvim/plugin/softencrypt.lua` and restart Neovim. For other config
-locations, use `stdpath('config') .. '/plugin/'`. Remove any previous copy of
-`plugin/encrypt.lua` before installing.
+Or copy [plugin/softlock.lua](plugin/softlock.lua) to
+`~/.config/nvim/plugin/softlock.lua` and restart Neovim. For other config
+locations, use `stdpath('config') .. '/plugin/'`. Remove previous encryption-plugin copies before installing.
 
 ## Usage
 
@@ -30,7 +29,7 @@ Create an encrypted file:
 
 ```vim
 :edit notes.md.gpg
-:EncryptSetup
+:SoftLockSetup
 ```
 
 Enter and confirm a passphrase. Setup saves immediately. Opening an existing
@@ -40,9 +39,9 @@ ciphertext without prompting again.
 Convert the current buffer, including unsaved edits:
 
 ```vim
-:EncryptSetup
+:SoftLockSetup
 " Prompts for a destination, suggesting the current filename plus .gpg.
-:EncryptSetup another-name.md.gpg
+:SoftLockSetup another-name.md.gpg
 " Uses an explicit destination.
 ```
 
@@ -52,18 +51,18 @@ passphrase prompt leaves persistence protections enabled.
 
 | Command | Action |
 | --- | --- |
-| `:EncryptSetup [path.gpg]` | Encrypt the current buffer to a new file. |
-| `:EncryptUnlock` | Retry a cancelled or failed unlock. |
-| `:EncryptChangePassphrase` | Confirm a new passphrase and save immediately. |
-| `:EncryptCheck` | Diagnose GPG using dummy text. |
+| `:SoftLockSetup [path.gpg]` | Encrypt the current buffer to a new file. |
+| `:SoftLockUnlock` | Retry a cancelled or failed unlock. |
+| `:SoftLockChangePassphrase` | Confirm a new passphrase and save immediately. |
+| `:SoftLockCheck` | Diagnose GPG using dummy text. |
 
 Empty passphrases cancel; newline and NUL characters are unsupported. Use a strong
 passphrase: files permit offline password guessing. Passphrases stay in private
 Lua state until the buffer is unloaded or wiped; hidden buffers remain unlocked.
 
-The buffer uses the underlying name (`notes.md`); `b:softencrypt_path` holds the
+The buffer uses the underlying name (`notes.md`); `b:softlock_path` holds the
 ciphertext path. Normal filetype detection and read/write hooks run against the
-underlying name. No plaintext file is created there. See `:help softencrypt` when
+underlying name. No plaintext file is created there. See `:help softlock` when
 installed as a repository.
 
 ## Protections and limits

@@ -1,6 +1,6 @@
 local api, uv = vim.api, vim.uv
-local root = assert(vim.env.SOFTENCRYPT_TEST_ROOT)
-local source = assert(vim.env.SOFTENCRYPT_PLUGIN)
+local root = assert(vim.env.SOFTLOCK_TEST_ROOT)
+local source = assert(vim.env.SOFTLOCK_PLUGIN)
 vim.o.shadafile = '' -- Test disabling a real ShaDa destination, including :wshada.
 vim.o.shada = "!,'100,<50,s10,h"
 vim.o.swapfile = true
@@ -111,7 +111,7 @@ with_dummy_gpg(function()
     input('dummy secret', 'dummy secret')
     local link = uv.fs_link
     uv.fs_link = function() return nil, 'injected link failure' end
-    local ok, err = pcall(vim.cmd, 'EncryptSetup ' .. destination)
+    local ok, err = pcall(vim.cmd, 'SoftLockSetup ' .. destination)
     uv.fs_link = link
     assert(not ok and tostring(err):find('encrypted save failed', 1, true), tostring(err))
     assert(not uv.fs_stat(destination))
@@ -120,7 +120,7 @@ with_dummy_gpg(function()
     while true do
       local name = uv.fs_scandir_next(scanner)
       if not name then break end
-      assert(not name:match('^%.softencrypt%-'), 'temporary file was not cleaned up')
+      assert(not name:match('^%.softlock%-'), 'temporary file was not cleaned up')
     end
     wipe()
   end)
@@ -133,7 +133,7 @@ with_dummy_gpg(function()
     local unlink, notify = uv.fs_unlink, vim.notify
     local temporary, warnings = nil, {}
     uv.fs_unlink = function(name)
-      if vim.fs.basename(name):match('^%.softencrypt%-') then
+      if vim.fs.basename(name):match('^%.softlock%-') then
         temporary = name
         return nil, 'injected cleanup failure'
       end
@@ -142,12 +142,12 @@ with_dummy_gpg(function()
     vim.notify = function(message, level)
       if level == vim.log.levels.WARN then warnings[#warnings + 1] = message end
     end
-    local ok, err = pcall(vim.cmd, 'EncryptSetup ' .. destination)
+    local ok, err = pcall(vim.cmd, 'SoftLockSetup ' .. destination)
     uv.fs_unlink, vim.notify = unlink, notify
     assert(ok, err)
     equal(read(destination), 'published contents\n')
     equal(api.nvim_buf_get_name(0), root .. '/published.txt')
-    equal(vim.b.softencrypt_path, destination)
+    equal(vim.b.softlock_path, destination)
     assert(not vim.bo.modified)
     assert(temporary and uv.fs_stat(temporary))
     assert(#warnings == 1 and warnings[1]:find(temporary, 1, true))
@@ -164,7 +164,7 @@ with_dummy_gpg(function()
   end)
 end)
 
-if vim.env.SOFTENCRYPT_TEST_REGRESSIONS_ONLY == '1' then
+if vim.env.SOFTLOCK_TEST_REGRESSIONS_ONLY == '1' then
   print(('ALL %d REGRESSION GROUPS PASSED (dummy GPG transport)'):format(completed))
   vim.cmd('qa!')
 end
@@ -176,12 +176,12 @@ test('new buffer, detection, setup, encrypted write, and reload', function()
   assert(not uv.fs_stat(root .. '/notes.md.gpg'))
   api.nvim_buf_set_lines(0, 0, -1, true, { '# MEMORY_ONLY_SENTINEL', 'hello' })
   input('test secret', 'test secret')
-  vim.cmd('EncryptSetup')
+  vim.cmd('SoftLockSetup')
   equal(api.nvim_buf_get_name(0), root .. '/notes.md')
-  equal(vim.b.softencrypt_path, root .. '/notes.md.gpg')
-  equal(decrypted(vim.b.softencrypt_path, 'test secret'), '# MEMORY_ONLY_SENTINEL\nhello\n')
+  equal(vim.b.softlock_path, root .. '/notes.md.gpg')
+  equal(decrypted(vim.b.softlock_path, 'test secret'), '# MEMORY_ONLY_SENTINEL\nhello\n')
   assert(not uv.fs_stat(root .. '/notes.md'))
-  equal(bit.band(uv.fs_stat(vim.b.softencrypt_path).mode, 511), 384, 'permissions')
+  equal(bit.band(uv.fs_stat(vim.b.softlock_path).mode, 511), 384, 'permissions')
   assert(not vim.bo.swapfile and not vim.bo.undofile)
   equal(vim.o.shadafile, 'NONE')
   api.nvim_buf_set_lines(0, 1, 2, true, { 'edited' })
@@ -189,7 +189,7 @@ test('new buffer, detection, setup, encrypted write, and reload', function()
   vim.cmd('write')
   equal(prompts, count, 'save must not prompt')
   assert(not vim.bo.modified)
-  equal(decrypted(vim.b.softencrypt_path, 'test secret'), '# MEMORY_ONLY_SENTINEL\nedited\n')
+  equal(decrypted(vim.b.softlock_path, 'test secret'), '# MEMORY_ONLY_SENTINEL\nedited\n')
   wipe()
   count = prompts
   input('test secret')
@@ -208,7 +208,7 @@ test('existing plaintext source and unsaved changes', function()
   api.nvim_buf_set_lines(0, 0, -1, true, { 'unsaved encrypted content' })
   local old_ftplugin = vim.b.did_ftplugin
   input('conversion secret', 'conversion secret')
-  vim.cmd('EncryptSetup')
+  vim.cmd('SoftLockSetup')
   equal(read(root .. '/source.md'), 'original source\n')
   equal(decrypted(root .. '/converted.md.gpg', 'conversion secret'), 'unsaved encrypted content\n')
   equal(vim.b.did_ftplugin, old_ftplugin)
@@ -224,7 +224,7 @@ test('wrong passphrase stays protected and can retry', function()
   equal(api.nvim_buf_get_lines(0, 0, -1, true), { '' })
   command_fails('write!', 'locked')
   input('test secret')
-  vim.cmd('EncryptUnlock')
+  vim.cmd('SoftLockUnlock')
   equal(vim.bo.filetype, 'markdown')
   wipe()
 end)
@@ -263,13 +263,13 @@ end)
 test('external modifications are not overwritten, even with bang', function()
   input('test secret')
   edit(root .. '/notes.md.gpg')
-  local original = read(vim.b.softencrypt_path)
-  write(vim.b.softencrypt_path, original .. 'external')
+  local original = read(vim.b.softlock_path)
+  write(vim.b.softlock_path, original .. 'external')
   api.nvim_buf_set_lines(0, 0, 1, true, { 'changed in memory' })
   command_fails('write!', 'changed externally')
-  equal(read(vim.b.softencrypt_path), original .. 'external')
+  equal(read(vim.b.softlock_path), original .. 'external')
   assert(vim.bo.modified)
-  write(vim.b.softencrypt_path, original)
+  write(vim.b.softlock_path, original)
   wipe()
 end)
 
@@ -278,11 +278,11 @@ test('setup mismatch and existing destination preserve buffer and target', funct
   api.nvim_buf_set_lines(0, 0, -1, true, { 'keep me' })
   local name = api.nvim_buf_get_name(0)
   input('a', 'b')
-  command_fails('EncryptSetup ' .. root .. '/cancel.txt.gpg', 'do not match')
+  command_fails('SoftLockSetup ' .. root .. '/cancel.txt.gpg', 'do not match')
   equal(api.nvim_buf_get_name(0), name)
   assert(vim.bo.modified)
   assert(not uv.fs_stat(root .. '/cancel.txt.gpg'))
-  command_fails('EncryptSetup ' .. root .. '/notes.md.gpg', 'will not overwrite')
+  command_fails('SoftLockSetup ' .. root .. '/notes.md.gpg', 'will not overwrite')
   equal(api.nvim_buf_get_lines(0, 0, -1, true), { 'keep me' })
   wipe()
 end)
@@ -291,11 +291,11 @@ test('passphrase change commits only after successful write', function()
   input('test secret')
   edit(root .. '/notes.md.gpg')
   input('replacement secret', 'replacement secret')
-  vim.cmd('EncryptChangePassphrase')
-  equal(decrypted(vim.b.softencrypt_path, 'replacement secret'), '# MEMORY_ONLY_SENTINEL\nedited\n')
+  vim.cmd('SoftLockChangePassphrase')
+  equal(decrypted(vim.b.softlock_path, 'replacement secret'), '# MEMORY_ONLY_SENTINEL\nedited\n')
   api.nvim_buf_set_lines(0, 0, -1, true, { 'new contents' })
   vim.cmd('write')
-  equal(decrypted(vim.b.softencrypt_path, 'replacement secret'), 'new contents\n')
+  equal(decrypted(vim.b.softlock_path, 'replacement secret'), 'new contents\n')
   wipe()
 end)
 
@@ -325,28 +325,28 @@ end)
 test('GPG and disk write failures preserve ciphertext and passphrase', function()
   input('replacement secret')
   edit(root .. '/notes.md.gpg')
-  local original = read(vim.b.softencrypt_path)
+  local original = read(vim.b.softlock_path)
   api.nvim_buf_set_lines(0, 0, -1, true, { 'pending changes' })
   local original_system = vim.system
   vim.system = function() return { wait = function() return { code = 1, stderr = 'injected failure' } end } end
   command_fails('write', 'GPG encryption failed')
   vim.system = original_system
-  equal(read(vim.b.softencrypt_path), original)
+  equal(read(vim.b.softlock_path), original)
   assert(vim.bo.modified)
   local original_write = uv.fs_write
   uv.fs_write = function() return nil, 'injected disk full' end
   input('not committed', 'not committed')
-  command_fails('EncryptChangePassphrase', 'encrypted save failed')
+  command_fails('SoftLockChangePassphrase', 'encrypted save failed')
   uv.fs_write = original_write
-  equal(read(vim.b.softencrypt_path), original)
+  equal(read(vim.b.softlock_path), original)
   assert(vim.bo.modified)
   vim.cmd('write')
-  equal(decrypted(vim.b.softencrypt_path, 'replacement secret'), 'pending changes\n')
+  equal(decrypted(vim.b.softlock_path, 'replacement secret'), 'pending changes\n')
   local scanner = assert(uv.fs_scandir(root))
   while true do
     local name = uv.fs_scandir_next(scanner)
     if not name then break end
-    assert(not name:match('^%.softencrypt%-'), 'ciphertext temporary file was not cleaned up')
+    assert(not name:match('^%.softlock%-'), 'ciphertext temporary file was not cleaned up')
   end
   wipe()
 end)
@@ -377,8 +377,8 @@ test('unnamed setup supports escaped spaces and shell characters in names', func
   api.nvim_buf_set_lines(0, 0, -1, true, { 'MEMORY_ONLY_SENTINEL safe argv' })
   local destination = root .. '/space ; dollar$ file.txt.gpg'
   input('name secret', 'name secret')
-  vim.cmd('EncryptSetup ' .. vim.fn.fnameescape(destination))
-  equal(vim.b.softencrypt_path, destination)
+  vim.cmd('SoftLockSetup ' .. vim.fn.fnameescape(destination))
+  equal(vim.b.softlock_path, destination)
   equal(decrypted(destination, 'name secret'), 'MEMORY_ONLY_SENTINEL safe argv\n')
   wipe()
 end)
@@ -389,7 +389,7 @@ test('conversion preserves an empty file versus a single newline', function()
     write(name, contents)
     edit(name)
     input('empty secret', 'empty secret')
-    vim.cmd('EncryptSetup ' .. name .. '.gpg')
+    vim.cmd('SoftLockSetup ' .. name .. '.gpg')
     equal(decrypted(name .. '.gpg', 'empty secret'), contents)
     wipe()
   end
